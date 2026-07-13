@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notificationManager: NotificationManager?
     private var ipcListener: IPCListener?
     private var ipcMessageHandler: IPCMessageHandler?
+    private var archiveService: ArchiveService?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 0. Force dark appearance (matches terminal emulator default)
@@ -55,6 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sm = SessionManager(sqliteStore: store)
         sm.setNotificationManager(nm)
         sessionManager = sm
+
+        // 5b. Initialize ArchiveService
+        archiveService = ArchiveService(store: store)
 
         // 6. Initialize IPCListener and IPCMessageHandler
         let ipcListener = IPCListener()
@@ -184,6 +188,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func showArchivedTracks(_ sender: Any?) {
+        guard let archiveService = archiveService,
+              let splitVC = windowManager?.mainSplitVC,
+              splitVC.view.window != nil else { return }
+
+        let sheet = ArchivedTracksSheet(archiveService: archiveService)
+        sheet.onRehydrate = { _ in
+            // The sidebar's ValueObservation repopulates automatically once the
+            // rehydrated rows are re-inserted into the database.
+        }
+        splitVC.presentAsSheet(sheet)
+    }
+
     private func setupMainMenu() {
         let mainMenu = NSMenu()
 
@@ -207,7 +224,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(fileMenuItem)
         let fileMenu = NSMenu(title: "File")
         fileMenuItem.submenu = fileMenu
+        let archivedItem = NSMenuItem(title: "Archived Tracks…", action: #selector(showArchivedTracks(_:)), keyEquivalent: "")
+        archivedItem.target = self
+        fileMenu.addItem(archivedItem)
+        fileMenu.addItem(.separator())
         fileMenu.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+
+        // Edit menu — required for Cmd+V / Cmd+C / Cmd+X to reach terminal views
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenuItem.submenu = editMenu
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
 
         // Window menu
         let windowMenuItem = NSMenuItem()
@@ -341,6 +372,35 @@ extension AppDelegate: SidebarViewControllerDelegate {
             try store.deleteTrack(id: trackId)
         } catch {
             print("Failed to delete track: \(error)")
+        }
+    }
+
+    func sidebarDidRequestArchiveTrack(_ trackId: String) {
+        guard let store = sqliteStore, let sm = sessionManager, let archiveService = archiveService else { return }
+
+        // Tear down any live sessions for this track before archiving so no
+        // process keeps writing to the DB rows we are about to serialize.
+        if let terminals = try? store.fetchTerminals(forTrackId: trackId) {
+            for terminal in terminals {
+                sm.removeSession(terminalId: terminal.id)
+            }
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try archiveService.archive(trackId: trackId)
+                DispatchQueue.main.async { [weak self] in
+                    self?.windowManager?.mainSplitVC?.terminalAreaVC.showEmptyState()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .critical
+                    alert.runModal()
+                }
+            }
         }
     }
 

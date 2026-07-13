@@ -19,6 +19,7 @@ protocol SidebarViewControllerDelegate: AnyObject {
     func sidebarDidRequestNewConsole(inTrackId: String)
     func sidebarDidRequestNewTrack()
     func sidebarDidRequestDeleteTrack(_ trackId: String)
+    func sidebarDidRequestArchiveTrack(_ trackId: String)
     func sidebarDidRequestDeleteConsole(_ terminalId: String)
     func sidebarDidRequestRestartConsole(_ terminalId: String)
     func sidebarDidRequestRenameConsole(_ terminalId: String, newName: String)
@@ -462,6 +463,11 @@ extension SidebarViewController: NSMenuDelegate {
 
             menu.addItem(.separator())
 
+            let archiveTrack = NSMenuItem(title: "Archive Track…", action: #selector(menuArchiveTrack(_:)), keyEquivalent: "")
+            archiveTrack.representedObject = itemId
+            archiveTrack.target = self
+            menu.addItem(archiveTrack)
+
             let deleteTrack = NSMenuItem(title: "Delete Track", action: #selector(menuDeleteTrack(_:)), keyEquivalent: "")
             deleteTrack.representedObject = itemId
             deleteTrack.target = self
@@ -551,6 +557,21 @@ extension SidebarViewController: NSMenuDelegate {
         alert.addButton(withTitle: "Cancel")
         if alert.runModal() == .alertFirstButtonReturn {
             delegate?.sidebarDidRequestDeleteTrack(trackId)
+        }
+    }
+
+    @objc private func menuArchiveTrack(_ sender: NSMenuItem) {
+        guard let trackId = sender.representedObject as? String,
+              let track = tracks.first(where: { $0.id == trackId }) else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Archive Track"
+        alert.informativeText = "Archive \"\(track.name)\"? Its consoles, activity log, notes, uncommitted git changes, and Claude conversation will be saved to a compressed archive and removed from the sidebar. You can rehydrate it later from File ▸ Archived Tracks."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Archive")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            delegate?.sidebarDidRequestArchiveTrack(trackId)
         }
     }
 
