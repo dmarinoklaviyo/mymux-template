@@ -1,0 +1,35 @@
+# Swift / SPM
+Mymux/.build/
+Mymux/DerivedData/
+*.swiftpm/
+Packages/
+
+# Node.js / MCP server
+mcp-server/node_modules/
+mcp-server/dist/
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
+
+# Runtime artifacts
+/tmp/mymux-ipc.sock
+/tmp/mymux-mcp/
+
+# Logs
+*.log

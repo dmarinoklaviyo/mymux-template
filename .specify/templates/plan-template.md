@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+<!--
+  Constitution v1.0.0 — check each gate that applies to this feature:
+  - [ ] Feature is observable in the running app (Principle I — Observability-First)
+  - [ ] Verification plan includes `swift run` confirmation, not just compile (Principle II)
+  - [ ] App runs on macOS 14+ without App Sandbox; any non-default stack choice documented (Principle III)
+  - [ ] Any IPC additions use POSIX sockets + DispatchSource (Principle IV)
+  - [ ] Feature is within PRD scope — no scope creep (Principle V)
+  - [ ] Quality Gates G1+G2 (build + launch) apply to every task; list additional G3–G6 below
+-->
+
+[List applicable Quality Gates from constitution and any feature-specific acceptance gates]
 
 ## Project Structure
 

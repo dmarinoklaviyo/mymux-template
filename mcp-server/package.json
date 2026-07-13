@@ -1,0 +1,19 @@
+{
+  "name": "mymux-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=../Mymux/Resources/mymux-mcp-server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.19.12": true
+  }
+}
