@@ -2,7 +2,14 @@ import AppKit
 
 final class NewTrackSheet: NSViewController {
     private let sqliteStore: SQLiteStore
+    /// When set, the sheet edits this existing track instead of creating one.
+    private let editingTrack: WorkTrack?
     var onCreated: ((WorkTrack) -> Void)?
+    /// Called after an edit is saved, with (old, updated) so callers can react
+    /// to what changed (e.g. notify live sessions). Only fired in edit mode.
+    var onEdited: ((WorkTrack, WorkTrack) -> Void)?
+
+    private var isEditing: Bool { editingTrack != nil }
 
     // MARK: - UI Elements
     private let nameField = NSTextField()
@@ -17,8 +24,9 @@ final class NewTrackSheet: NSViewController {
 
     // MARK: - Init
 
-    init(sqliteStore: SQLiteStore) {
+    init(sqliteStore: SQLiteStore, editingTrack: WorkTrack? = nil) {
         self.sqliteStore = sqliteStore
+        self.editingTrack = editingTrack
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -38,7 +46,7 @@ final class NewTrackSheet: NSViewController {
     }
 
     private func setupUI() {
-        let titleLabel = NSTextField(labelWithString: "New Work Track")
+        let titleLabel = NSTextField(labelWithString: isEditing ? "Edit Work Track" : "New Work Track")
         titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
@@ -87,7 +95,17 @@ final class NewTrackSheet: NSViewController {
         view.addSubview(notesLabel)
         view.addSubview(contextNotesScrollView)
 
+        // Prefill when editing
+        if let track = editingTrack {
+            nameField.stringValue = track.name
+            repoPathField.stringValue = track.repoPath
+            branchField.stringValue = track.branch
+            linearUrlField.stringValue = track.linearTicketUrl ?? ""
+            contextNotesView.string = track.contextNotes
+        }
+
         // Buttons
+        createButton.title = isEditing ? "Save" : "Create"
         createButton.bezelStyle = .rounded
         createButton.keyEquivalent = "\r"
         createButton.target = self
@@ -208,6 +226,28 @@ final class NewTrackSheet: NSViewController {
         let branch = branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let linearUrl = linearUrlField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let contextNotes = contextNotesView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let existing = editingTrack {
+            // Edit: preserve id/createdAt/status, update the mutable fields.
+            var updated = existing
+            updated.name = name
+            updated.repoPath = repoPath
+            updated.branch = branch.isEmpty ? "main" : branch
+            updated.linearTicketUrl = linearUrl.isEmpty ? nil : linearUrl
+            updated.contextNotes = contextNotes
+
+            do {
+                try sqliteStore.updateTrack(updated)
+                dismissSheet()
+                onEdited?(existing, updated)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Error Saving Track"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
+            return
+        }
 
         let track = WorkTrack(
             name: name,

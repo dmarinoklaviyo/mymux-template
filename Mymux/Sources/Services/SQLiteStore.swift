@@ -80,6 +80,12 @@ final class SQLiteStore {
             """)
         }
 
+        migrator.registerMigration("004_claudeSessionId") { db in
+            try db.execute(sql: """
+                ALTER TABLE terminals ADD COLUMN claudeSessionId TEXT;
+            """)
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -185,6 +191,15 @@ final class SQLiteStore {
             try db.execute(
                 sql: "UPDATE terminals SET lastAccessedAt = ? WHERE id = ?",
                 arguments: [timestamp, id]
+            )
+        }
+    }
+
+    func updateTerminalClaudeSessionId(id: String, sessionId: String) throws {
+        try dbPool.write { db in
+            try db.execute(
+                sql: "UPDATE terminals SET claudeSessionId = ? WHERE id = ?",
+                arguments: [sessionId, id]
             )
         }
     }

@@ -18,6 +18,7 @@ protocol SidebarViewControllerDelegate: AnyObject {
     func sidebarDidSelectTerminal(_ terminalId: String?)
     func sidebarDidRequestNewConsole(inTrackId: String)
     func sidebarDidRequestNewTrack()
+    func sidebarDidRequestEditTrack(_ trackId: String)
     func sidebarDidRequestDeleteTrack(_ trackId: String)
     func sidebarDidRequestArchiveTrack(_ trackId: String)
     func sidebarDidRequestDeleteConsole(_ terminalId: String)
@@ -432,6 +433,11 @@ extension SidebarViewController: NSMenuDelegate {
 
         // Track item context menu
         if let track = tracks.first(where: { $0.id == itemId }) {
+            let editTrack = NSMenuItem(title: "Edit Track…", action: #selector(menuEditTrack(_:)), keyEquivalent: "")
+            editTrack.representedObject = itemId
+            editTrack.target = self
+            menu.addItem(editTrack)
+
             let newConsole = NSMenuItem(title: "New Console", action: #selector(menuNewConsole(_:)), keyEquivalent: "")
             newConsole.representedObject = itemId
             newConsole.target = self
@@ -558,6 +564,11 @@ extension SidebarViewController: NSMenuDelegate {
         if alert.runModal() == .alertFirstButtonReturn {
             delegate?.sidebarDidRequestDeleteTrack(trackId)
         }
+    }
+
+    @objc private func menuEditTrack(_ sender: NSMenuItem) {
+        guard let trackId = sender.representedObject as? String else { return }
+        delegate?.sidebarDidRequestEditTrack(trackId)
     }
 
     @objc private func menuArchiveTrack(_ sender: NSMenuItem) {

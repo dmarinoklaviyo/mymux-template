@@ -43,10 +43,22 @@ final class SessionManager {
         let environment: [String]
 
         if let mcpConfigPath = try? MCPConfigGenerator.writeConfig(terminalId: terminal.id) {
+            // If this terminal already owns a conversation on disk (e.g. a
+            // rehydrated track), resume it; otherwise assign a fresh id that we
+            // control so we can always resume exactly this terminal later.
+            let mode: ClaudeCommandBuilder.SessionMode
+            if let sid = terminal.claudeSessionId, !sid.isEmpty,
+               transcriptExists(sessionId: sid, repoPath: track.repoPath) {
+                mode = .resume(sessionId: sid)
+            } else {
+                let newId = UUID().uuidString.lowercased()
+                try? sqliteStore.updateTerminalClaudeSessionId(id: terminal.id, sessionId: newId)
+                mode = .fresh(sessionId: newId)
+            }
             let command = ClaudeCommandBuilder.buildCommand(
                 terminal: terminal,
                 track: track,
-                isRestart: false,
+                sessionMode: mode,
                 mcpConfigPath: mcpConfigPath
             )
             args = ["-l", "-c", command]
@@ -95,10 +107,20 @@ final class SessionManager {
 
         let executable = "/bin/zsh"
         let mcpConfigPath = (try? MCPConfigGenerator.writeConfig(terminalId: terminalId)) ?? ""
+        // Resume this terminal's exact conversation only if its transcript
+        // actually exists on disk; otherwise fall back to --continue so a stale
+        // or missing id never hard-fails the launch.
+        let mode: ClaudeCommandBuilder.SessionMode
+        if let sid = terminal.claudeSessionId, !sid.isEmpty,
+           transcriptExists(sessionId: sid, repoPath: track.repoPath) {
+            mode = .resume(sessionId: sid)
+        } else {
+            mode = .continueRecent
+        }
         let command = ClaudeCommandBuilder.buildCommand(
             terminal: terminal,
             track: track,
-            isRestart: true,
+            sessionMode: mode,
             mcpConfigPath: mcpConfigPath
         )
         let args = ["-l", "-c", command]
@@ -120,7 +142,36 @@ final class SessionManager {
         terminalAreaViewController?.updateShellDirectoryIfCurrent(terminalId: terminalId, path: path)
     }
 
+    /// Injects a one-line message into every live Claude session belonging to a
+    /// track, followed by Enter, so Claude receives it as if the user typed it.
+    /// Used to inform running sessions when track settings change.
+    func broadcastToTrackSessions(trackId: String, message: String) {
+        guard let terminals = try? sqliteStore.fetchTerminals(forTrackId: trackId) else { return }
+        // Single-line only: embedded newlines would submit prematurely in
+        // Claude's TUI. Callers must pass a newline-free string.
+        let line = message.replacingOccurrences(of: "\n", with: " ") + "\r"
+        for terminal in terminals {
+            guard let container = activeSessions[terminal.id] else { continue }
+            container.terminalView.send(txt: line)
+        }
+    }
+
     // MARK: - Private
+
+    /// Claude stores transcripts at ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl,
+    /// where the cwd is encoded by replacing `/` and `.` with `-`. Sessions are
+    /// launched with cwd = the track's repoPath (or home when empty).
+    private func transcriptExists(sessionId: String, repoPath: String) -> Bool {
+        let path = repoPath.isEmpty
+            ? FileManager.default.homeDirectoryForCurrentUser.path
+            : repoPath
+        let encoded = path
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ".", with: "-")
+        let transcript = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects/\(encoded)/\(sessionId).jsonl")
+        return FileManager.default.fileExists(atPath: transcript.path)
+    }
 
     private func setupGitStatusChecker() {
         gitStatusChecker.onStatusUpdate = { [weak self] terminalId, gitStatus in
