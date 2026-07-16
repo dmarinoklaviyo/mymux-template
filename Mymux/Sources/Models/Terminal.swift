@@ -9,6 +9,10 @@ struct Terminal: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var runtimeStatus: String
     var createdAt: String
     var lastAccessedAt: String?
+    /// The Claude Code session UUID this terminal is bound to, captured from the
+    /// SessionStart hook. Used to `claude --resume <id>` the exact conversation
+    /// on restart, so terminals sharing a repo directory never cross-resume.
+    var claudeSessionId: String?
 
     static let databaseTableName = "terminals"
     static let trackForeignKey = ForeignKey(["trackId"])
@@ -22,7 +26,8 @@ struct Terminal: Codable, FetchableRecord, PersistableRecord, Identifiable {
         worktreeName: String? = nil,
         runtimeStatus: String = RuntimeStatus.live.rawValue,
         createdAt: String = ISO8601DateFormatter().string(from: Date()),
-        lastAccessedAt: String? = nil
+        lastAccessedAt: String? = nil,
+        claudeSessionId: String? = nil
     ) {
         self.id = id
         self.trackId = trackId
@@ -31,5 +36,6 @@ struct Terminal: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.runtimeStatus = runtimeStatus
         self.createdAt = createdAt
         self.lastAccessedAt = lastAccessedAt
+        self.claudeSessionId = claudeSessionId
     }
 }

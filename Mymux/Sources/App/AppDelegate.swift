@@ -358,6 +358,45 @@ extension AppDelegate: SidebarViewControllerDelegate {
         windowManager?.mainSplitVC?.presentAsSheet(sheet)
     }
 
+    func sidebarDidRequestEditTrack(_ trackId: String) {
+        guard let store = sqliteStore,
+              let track = try? store.fetchTrack(id: trackId),
+              windowManager?.mainSplitVC?.view.window != nil else { return }
+
+        let sheet = NewTrackSheet(sqliteStore: store, editingTrack: track)
+        sheet.onEdited = { [weak self] old, updated in
+            self?.notifyTrackContextChange(old: old, updated: updated)
+        }
+        windowManager?.mainSplitVC?.presentAsSheet(sheet)
+    }
+
+    /// Tells every live Claude session in the track about the settings that
+    /// changed, so it adjusts without the user re-explaining.
+    private func notifyTrackContextChange(old: WorkTrack, updated: WorkTrack) {
+        var clauses: [String] = []
+
+        if old.repoPath != updated.repoPath {
+            let newDir = updated.repoPath.isEmpty ? "the home directory" : updated.repoPath
+            clauses.append("the working directory is now \(newDir) — your shell is still in the previous directory, so cd there for further work (the launch directory changes fully when this console is restarted)")
+        }
+        if old.branch != updated.branch {
+            clauses.append("the git branch is now \(updated.branch)")
+        }
+        if old.contextNotes != updated.contextNotes {
+            if updated.contextNotes.isEmpty {
+                clauses.append("the context notes were cleared")
+            } else {
+                clauses.append("the updated context notes are: \(updated.contextNotes)")
+            }
+        }
+
+        guard !clauses.isEmpty else { return }
+
+        let message = "[mymux] Track settings were updated — please take these into account for the rest of our work: "
+            + clauses.joined(separator: "; ") + "."
+        sessionManager?.broadcastToTrackSessions(trackId: updated.id, message: message)
+    }
+
     func sidebarDidRequestDeleteTrack(_ trackId: String) {
         guard let store = sqliteStore, let sm = sessionManager else { return }
 

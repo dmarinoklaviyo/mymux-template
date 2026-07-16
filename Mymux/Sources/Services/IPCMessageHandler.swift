@@ -40,6 +40,9 @@ final class IPCMessageHandler {
         case "set_working_directory":
             return handleSetWorkingDirectory(terminalId: terminalId, payload: payload, reqId: reqId)
 
+        case "set_session_id":
+            return handleSetSessionId(terminalId: terminalId, payload: payload, reqId: reqId)
+
         case "notify_user":
             return handleNotifyUser(terminalId: terminalId, payload: payload, reqId: reqId)
 
@@ -98,6 +101,20 @@ final class IPCMessageHandler {
         onWorkingDirectorySet?(terminalId, path)
 
         return ["type": "ack", "req_id": reqId, "status": "ok"]
+    }
+
+    private func handleSetSessionId(terminalId: String, payload: [String: Any], reqId: String) -> [String: Any]? {
+        guard let sessionId = payload["session_id"] as? String, !sessionId.isEmpty else {
+            return ["type": "ack", "req_id": reqId, "status": "error", "message": "Missing 'session_id' field"]
+        }
+
+        do {
+            try sqliteStore.updateTerminalClaudeSessionId(id: terminalId, sessionId: sessionId)
+            return ["type": "ack", "req_id": reqId, "status": "ok"]
+        } catch {
+            print("Failed to store claude session id: \(error)")
+            return ["type": "ack", "req_id": reqId, "status": "error", "message": error.localizedDescription]
+        }
     }
 
     private func handleNotifyUser(terminalId: String, payload: [String: Any], reqId: String) -> [String: Any]? {

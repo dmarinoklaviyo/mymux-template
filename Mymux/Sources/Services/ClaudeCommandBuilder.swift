@@ -1,7 +1,20 @@
 import Foundation
 
 enum ClaudeCommandBuilder {
-    static func buildCommand(terminal: Terminal, track: WorkTrack, isRestart: Bool, mcpConfigPath: String) -> String {
+    /// How this launch should relate to Claude's conversation history.
+    enum SessionMode {
+        /// Brand-new conversation with a mymux-assigned id (`--session-id <id>`).
+        /// Because mymux chooses the id, we can always resume exactly this
+        /// terminal's conversation later — no guessing, no collisions.
+        case fresh(sessionId: String)
+        /// Resume a known, verified session (`--resume <id>`).
+        case resume(sessionId: String)
+        /// Resume whatever was most recent in the directory (`--continue`).
+        /// Fallback only, used when we have no reliable id.
+        case continueRecent
+    }
+
+    static func buildCommand(terminal: Terminal, track: WorkTrack, sessionMode: SessionMode, mcpConfigPath: String) -> String {
         var parts: [String] = []
 
         // cd to repo path
@@ -11,8 +24,17 @@ enum ClaudeCommandBuilder {
         parts.append("&&")
         parts.append("claude")
 
-        // Restart flag
-        if isRestart {
+        // Bind this launch to a specific conversation. mymux assigns the id on
+        // first launch (--session-id) and resumes that exact id afterwards, so
+        // terminals sharing a repo directory never cross-resume each other.
+        switch sessionMode {
+        case .fresh(let sessionId):
+            parts.append("--session-id")
+            parts.append(shellEscape(sessionId))
+        case .resume(let sessionId):
+            parts.append("--resume")
+            parts.append(shellEscape(sessionId))
+        case .continueRecent:
             parts.append("--continue")
         }
 
