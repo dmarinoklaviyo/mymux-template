@@ -17,26 +17,30 @@ enum MCPConfigGenerator {
             }
         }
 
-        // 2. Relative to executable (for SPM builds)
-        let executableURL = Bundle.main.executableURL
-        if let execURL = executableURL {
-            // .build/debug/Mymux -> up two levels -> project root -> Resources/
-            let candidates = [
-                execURL.deletingLastPathComponent()
-                    .appendingPathComponent("Resources/mymux-mcp-server.mjs"),
-                execURL.deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .appendingPathComponent("Resources/mymux-mcp-server.mjs"),
-                execURL.deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .appendingPathComponent("Mymux/Resources/mymux-mcp-server.mjs"),
+        // 2. Relative to executable (for SPM builds).
+        // Walk up the executable's ancestor directories looking for the
+        // bundled resource. SwiftPM lays the binary out as
+        // `.build/<arch-triple>/debug/Mymux` (the arch-triple dir count is
+        // not fixed across configs/platforms), so a hardcoded "up N levels"
+        // is fragile. Searching each ancestor for both `Resources/…` and
+        // `Mymux/Resources/…` handles debug, release, and triple layouts.
+        if let execURL = Bundle.main.executableURL {
+            let relativeSuffixes = [
+                "Resources/mymux-mcp-server.mjs",
+                "Mymux/Resources/mymux-mcp-server.mjs",
             ]
-            for candidate in candidates {
-                if FileManager.default.fileExists(atPath: candidate.path) {
-                    return candidate.path
+            var dir = execURL.deletingLastPathComponent()
+            // Bound the walk so we never climb past the filesystem root.
+            for _ in 0..<8 {
+                for suffix in relativeSuffixes {
+                    let candidate = dir.appendingPathComponent(suffix)
+                    if FileManager.default.fileExists(atPath: candidate.path) {
+                        return candidate.path
+                    }
                 }
+                let parent = dir.deletingLastPathComponent()
+                if parent.path == dir.path { break } // reached root
+                dir = parent
             }
         }
 
